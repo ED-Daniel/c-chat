@@ -15,7 +15,7 @@ void *receive_messages(void *socket_desc) {
 
     while ((read_size = recv(sock, buffer, BUFFER_SIZE, 0)) > 0) {
         buffer[read_size] = '\0';
-        printf("%s\n", buffer);
+        printf("%s", buffer);
     }
 
     if (read_size == 0) {

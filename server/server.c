@@ -10,48 +10,53 @@
 #define MAX_CLIENTS 10
 
 int client_sockets[MAX_CLIENTS];
-struct sockaddr_in client_addrs[MAX_CLIENTS];
 pthread_mutex_t clients_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+void send_message_to_all(char *message, int exclude_sock) {
+    pthread_mutex_lock(&clients_mutex);
+    for (int i = 0; i < MAX_CLIENTS; i++) {
+        if (client_sockets[i] != 0 && client_sockets[i] != exclude_sock) {
+            send(client_sockets[i], message, strlen(message), 0);
+        }
+    }
+    pthread_mutex_unlock(&clients_mutex);
+}
 
 void *handle_client(void *socket_desc) {
     int sock = *(int *)socket_desc;
     char buffer[BUFFER_SIZE];
     int read_size;
-    char message[BUFFER_SIZE + INET_ADDRSTRLEN + 3]; // Additional space for IP address and ": "
+    struct sockaddr_in client_addr;
+    socklen_t addr_size = sizeof(struct sockaddr_in);
+    getpeername(sock, (struct sockaddr*)&client_addr, &addr_size);
+    char client_ip[INET_ADDRSTRLEN];
+    inet_ntop(AF_INET, &client_addr.sin_addr, client_ip, INET_ADDRSTRLEN);
+
+    char join_message[BUFFER_SIZE];
+    snprintf(join_message, sizeof(join_message), "Client %s joined the c-chat\n", client_ip);
+    send_message_to_all(join_message, sock);
 
     while ((read_size = recv(sock, buffer, BUFFER_SIZE, 0)) > 0) {
         buffer[read_size] = '\0';
-        
-        struct sockaddr_in client_addr;
-        socklen_t addr_size = sizeof(struct sockaddr_in);
-        getpeername(sock, (struct sockaddr*)&client_addr, &addr_size);
-        char client_ip[INET_ADDRSTRLEN];
-        inet_ntop(AF_INET, &client_addr.sin_addr, client_ip, INET_ADDRSTRLEN);
-
+        char message[BUFFER_SIZE + INET_ADDRSTRLEN + 3]; // Additional space for IP address and ": "
         snprintf(message, sizeof(message), "%s: %s", client_ip, buffer);
-
-        pthread_mutex_lock(&clients_mutex);
-
-        for (int i = 0; i < MAX_CLIENTS; i++) {
-            if (client_sockets[i] != 0 && client_sockets[i] != sock) {
-                send(client_sockets[i], message, strlen(message), 0);
-            }
-        }
-
-        pthread_mutex_unlock(&clients_mutex);
+        send_message_to_all(message, sock);
     }
 
     close(sock);
     pthread_mutex_lock(&clients_mutex);
-
     for (int i = 0; i < MAX_CLIENTS; i++) {
         if (client_sockets[i] == sock) {
             client_sockets[i] = 0;
             break;
         }
     }
-
     pthread_mutex_unlock(&clients_mutex);
+
+    char leave_message[BUFFER_SIZE];
+    snprintf(leave_message, sizeof(leave_message), "Client %s left the c-chat\n", client_ip);
+    send_message_to_all(leave_message, sock);
+
     free(socket_desc);
     pthread_exit(NULL);
 }
@@ -84,15 +89,12 @@ int main() {
         printf("Connection accepted from %s:%d\n", inet_ntoa(client.sin_addr), ntohs(client.sin_port));
 
         pthread_mutex_lock(&clients_mutex);
-
         for (int i = 0; i < MAX_CLIENTS; i++) {
             if (client_sockets[i] == 0) {
                 client_sockets[i] = client_socket;
-                client_addrs[i] = client;
                 break;
             }
         }
-
         pthread_mutex_unlock(&clients_mutex);
 
         pthread_t client_thread;
