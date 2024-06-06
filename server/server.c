@@ -10,20 +10,31 @@
 #define MAX_CLIENTS 10
 
 int client_sockets[MAX_CLIENTS];
+struct sockaddr_in client_addrs[MAX_CLIENTS];
 pthread_mutex_t clients_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 void *handle_client(void *socket_desc) {
     int sock = *(int *)socket_desc;
     char buffer[BUFFER_SIZE];
     int read_size;
+    char message[BUFFER_SIZE + INET_ADDRSTRLEN + 3]; // Additional space for IP address and ": "
 
     while ((read_size = recv(sock, buffer, BUFFER_SIZE, 0)) > 0) {
         buffer[read_size] = '\0';
+        
+        struct sockaddr_in client_addr;
+        socklen_t addr_size = sizeof(struct sockaddr_in);
+        getpeername(sock, (struct sockaddr*)&client_addr, &addr_size);
+        char client_ip[INET_ADDRSTRLEN];
+        inet_ntop(AF_INET, &client_addr.sin_addr, client_ip, INET_ADDRSTRLEN);
+
+        snprintf(message, sizeof(message), "%s: %s", client_ip, buffer);
+
         pthread_mutex_lock(&clients_mutex);
 
         for (int i = 0; i < MAX_CLIENTS; i++) {
             if (client_sockets[i] != 0 && client_sockets[i] != sock) {
-                send(client_sockets[i], buffer, strlen(buffer), 0);
+                send(client_sockets[i], message, strlen(message), 0);
             }
         }
 
@@ -70,13 +81,14 @@ int main() {
     printf("Waiting for incoming connections...\n");
 
     while ((client_socket = accept(server_socket, (struct sockaddr *)&client, &client_len))) {
-        printf("Connection accepted\n");
+        printf("Connection accepted from %s:%d\n", inet_ntoa(client.sin_addr), ntohs(client.sin_port));
 
         pthread_mutex_lock(&clients_mutex);
 
         for (int i = 0; i < MAX_CLIENTS; i++) {
             if (client_sockets[i] == 0) {
                 client_sockets[i] = client_socket;
+                client_addrs[i] = client;
                 break;
             }
         }
