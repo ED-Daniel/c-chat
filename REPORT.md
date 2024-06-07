@@ -197,32 +197,6 @@ void *receive_messages(void *socket_desc) {
 ```
 - `receive_messages`: Функция, выполняемая в отдельном потоке, которая непрерывно получает сообщения от сервера и выводит их на экран.
 
-### Функция для чтения файла `.env`
-```c
-void read_env(const char *filename, char *server_ip, int *server_port) {
-    FILE *file = fopen(filename, "r");
-    if (!file) {
-        perror("Could not open .env file");
-        exit(EXIT_FAILURE);
-    }
-
-    char line[256];
-    while (fgets(line, sizeof(line), file)) {
-        char *key = strtok(line, "=");
-        char *value = strtok(NULL, "\n");
-
-        if (strcmp(key, "SERVER_IP") == 0) {
-            strcpy(server_ip, value);
-        } else if (strcmp(key, "SERVER_PORT") == 0) {
-            *server_port = atoi(value);
-        }
-    }
-
-    fclose(file);
-}
-```
-- `read_env`: Функция для чтения IP-адреса и порта сервера из файла `.env`.
-
 ### Главная функция клиента
 ```c
 int main() {
@@ -231,11 +205,6 @@ int main() {
     char message[BUFFER_SIZE];
     pthread_t receive_thread;
 
-    char server_ip[16];
-    int server_port;
-
-    read_env(ENV_FILE, server_ip, &server_port);
-
     sock = socket(AF_INET, SOCK_STREAM, 0);
     if (sock == -1) {
         perror("Could not create socket");
@@ -243,8 +212,8 @@ int main() {
     }
 
     server.sin_family = AF_INET;
-    server.sin_addr.s_addr = inet_addr(server_ip);
-    server.sin_port = htons(server_port);
+    server.sin_addr.s_addr = inet_addr("158.160.137.120");
+    server.sin_port = htons(PORT);
 
     if (connect(sock, (struct sockaddr *)&server, sizeof(server)) < 0) {
         perror("Connect failed");
@@ -252,7 +221,7 @@ int main() {
         return 1;
     }
 
-    printf("Connected to server at %s:%d\n", server_ip, server_port);
+    printf("Connected to server\n");
 
     if (pthread_create(&receive_thread, NULL, receive_messages, (void *)&sock) < 0) {
         perror("Could not create thread");
