@@ -98,7 +98,7 @@ int main() {
         pthread_mutex_unlock(&clients_mutex);
 
         pthread_t client_thread;
-        new_sock = malloc(1);
+        new_sock = malloc(sizeof(int));
         *new_sock = client_socket;
 
         if (pthread_create(&client_thread, NULL, handle_client, (void *)new_sock) < 0) {
